@@ -2,169 +2,279 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Le Parcours Sacré — Jeu Complet</title>
+<title>Le Parcours Sacré</title>
 <style>
-  body { margin:0; background:#121018; color:#f3ecdf; font-family:Georgia,serif; overflow:hidden; }
-  canvas { display:block; margin:0 auto; background:#0d0a14; }
-  #ui { position:absolute; top:15px; left:15px; color:#d4b06a; font-size:18px; text-shadow:0 0 6px #d4b06a; }
-  #stage { position:absolute; top:15px; right:15px; color:#7eafc6; font-size:16px; }
-  #msg { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); color:#f3ecdf; font-size:20px; opacity:0; transition:opacity 0.4s; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#0a0810;
+    color:#f3ecdf;
+    font-family:Georgia, 'Times New Roman', serif;
+    overflow:hidden;
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  #game-container {
+    position:relative;
+    width:1000px;
+    height:600px;
+    box-shadow:0 0 40px rgba(212,176,106,0.15);
+    border:1px solid rgba(212,176,106,0.3);
+  }
+  canvas { display:block; background:#121018; }
+  #hud {
+    position:absolute;
+    top:0; left:0; right:0;
+    padding:12px 20px;
+    display:flex;
+    justify-content:space-between;
+    pointer-events:none;
+    font-size:18px;
+    text-shadow:0 0 8px rgba(212,176,106,0.6);
+  }
+  #title { color:#d4b06a; }
+  #stage { color:#7eafc6; }
+  #lives { color:#c4543e; }
+  #message {
+    position:absolute;
+    bottom:30px;
+    left:50%;
+    transform:translateX(-50%);
+    font-size:22px;
+    color:#f3ecdf;
+    text-shadow:0 0 10px #d4b06a;
+    opacity:0;
+    transition:opacity 0.5s;
+    pointer-events:none;
+  }
+  #win-screen {
+    position:absolute;
+    inset:0;
+    background:rgba(18,16,24,0.92);
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+  }
+  #win-screen h1 { color:#d4b06a; font-size:42px; margin-bottom:10px; }
+  #win-screen p { color:#7eafc6; font-size:20px; }
 </style>
 </head>
 <body>
-<canvas id="c" width="1000" height="600"></canvas>
-<div id="ui">Le Parcours Sacré</div>
-<div id="stage">Étape 1 — Graine de Vie</div>
-<div id="msg"></div>
+<div id="game-container">
+  <canvas id="c" width="1000" height="600"></canvas>
+  <div id="hud">
+    <div id="title">Le Parcours Sacré</div>
+    <div id="stage">Étape 1 — Graine de Vie</div>
+    <div id="lives">Vies : 3</div>
+  </div>
+  <div id="message"></div>
+  <div id="win-screen">
+    <h1>Gardien du Sacré</h1>
+    <p>Tu as traversé le Parcours.</p>
+  </div>
+</div>
+
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const ui = document.getElementById('stage');
-const msg = document.getElementById('msg');
+const stageEl = document.getElementById('stage');
+const livesEl = document.getElementById('lives');
+const messageEl = document.getElementById('message');
+const winScreen = document.getElementById('win-screen');
 
 const stages = [
-  { name: "Graine de Vie", color: "#4a7c59", platforms: 5 },
-  { name: "Fleur de Vie", color: "#f3ecdf", platforms: 7 },
-  { name: "Cube de Métatron", color: "#d4b06a", platforms: 6 },
-  { name: "Sri Yantra", color: "#8b3a3a", platforms: 8 },
-  { name: "Arbre de Vie", color: "#7eafc6", platforms: 6 },
-  { name: "Spirale d'or", color: "#e6c87a", platforms: 5 },
-  { name: "Vesica Piscis", color: "#f6f1ea", platforms: 6 },
-  { name: "Tétraèdre", color: "#c4543e", platforms: 5 },
-  { name: "Fleur de Vie (difficile)", color: "#a33", platforms: 8 },
-  { name: "Le Portail", color: "#d4b06a", platforms: 3 }
+  { name: "Graine de Vie", color: "#4a7c59", count: 5 },
+  { name: "Fleur de Vie", color: "#e8dcc8", count: 7 },
+  { name: "Cube de Métatron", color: "#d4b06a", count: 6 },
+  { name: "Sri Yantra", color: "#8b3a3a", count: 8 },
+  { name: "Arbre de Vie", color: "#7eafc6", count: 6 },
+  { name: "Spirale d'or", color: "#e6c87a", count: 5 },
+  { name: "Vesica Piscis", color: "#f6f1ea", count: 6 },
+  { name: "Tétraèdre", color: "#c4543e", count: 5 },
+  { name: "Fleur de Vie (difficile)", color: "#a33a3a", count: 9 },
+  { name: "Le Portail", color: "#d4b06a", count: 4 }
 ];
 
-let currentStage = 0;
-let player = { x: 80, y: 400, vx: 0, vy: 0, onGround: false, size: 16 };
+let current = 0;
+let lives = 3;
+let player = { x: 90, y: 380, vx: 0, vy: 0, size: 14, onGround: false };
 let platforms = [];
 let keys = {};
-let checkpointX = 80;
-let lives = 3;
+let particles = [];
 let won = false;
 
-window.addEventListener('keydown', e => keys[e.key] = true);
+window.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === ' ') e.preventDefault(); });
 window.addEventListener('keyup', e => keys[e.key] = false);
 
-function showMsg(text) {
-  msg.textContent = text;
-  msg.style.opacity = 1;
-  setTimeout(() => msg.style.opacity = 0, 2500);
+function showMessage(text) {
+  messageEl.textContent = text;
+  messageEl.style.opacity = 1;
+  setTimeout(() => messageEl.style.opacity = 0, 2200);
 }
 
-function generatePlatforms(stageIndex) {
+function generateLevel(index) {
   platforms = [];
-  const stage = stages[stageIndex];
-  const baseY = 480;
-  platforms.push({ x: 40, y: baseY, w: 120, h: 20, color: stage.color }); // start
-  for (let i = 1; i <= stage.platforms; i++) {
-    const x = 160 + i * (700 / stage.platforms) + (Math.random() - 0.5) * 40;
-    const y = baseY - (i % 3) * 40 - Math.random() * 30;
-    const w = 70 + Math.random() * 40;
-    platforms.push({ x, y, w, h: 18, color: stage.color });
+  const s = stages[index];
+  platforms.push({ x: 30, y: 500, w: 140, h: 22, color: s.color });
+  for (let i = 1; i <= s.count; i++) {
+    const progress = i / (s.count + 1);
+    const x = 180 + progress * 680 + (Math.sin(i * 1.7) * 30);
+    const y = 480 - Math.abs(Math.sin(i * 0.9)) * 90 - (index > 7 ? 20 : 0);
+    const w = 65 + Math.sin(i) * 15;
+    platforms.push({ x, y, w, h: 18, color: s.color });
   }
-  platforms.push({ x: 880, y: baseY - 20, w: 100, h: 30, color: "#d4b06a", isFinish: true });
+  platforms.push({ x: 860, y: 460, w: 110, h: 40, color: "#d4b06a", finish: true });
 }
 
-function resetPlayer() {
-  player.x = checkpointX;
-  player.y = 350;
-  player.vx = 0;
-  player.vy = 0;
-}
-
-function nextStage() {
-  if (currentStage < stages.length - 1) {
-    currentStage++;
-    checkpointX = 80;
-    generatePlatforms(currentStage);
-    resetPlayer();
-    ui.textContent = `Étape ${currentStage + 1} — ${stages[currentStage].name}`;
-    showMsg("Étape suivante");
-  } else {
-    won = true;
-    showMsg("Gardien du Sacré — Tu as terminé le Parcours");
-    ui.textContent = "Terminé";
+function spawnParticles(x, y, color) {
+  for (let i = 0; i < 12; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 4,
+      vy: (Math.random() - 0.5) * 4,
+      life: 30,
+      color
+    });
   }
 }
 
 function update() {
   if (won) return;
-  if (keys['ArrowLeft'] || keys['a']) player.vx = -5;
-  else if (keys['ArrowRight'] || keys['d']) player.vx = 5;
-  else player.vx *= 0.8;
+
+  // Movement
+  if (keys['ArrowLeft'] || keys['a']) player.vx = -4.8;
+  else if (keys['ArrowRight'] || keys['d']) player.vx = 4.8;
+  else player.vx *= 0.82;
 
   if ((keys['ArrowUp'] || keys['w'] || keys[' ']) && player.onGround) {
-    player.vy = -12;
+    player.vy = -11.5;
     player.onGround = false;
   }
 
-  player.vy += 0.6;
+  player.vy += 0.48;
   player.x += player.vx;
   player.y += player.vy;
 
   player.onGround = false;
   for (const p of platforms) {
-    if (player.x + player.size > p.x && player.x - player.size < p.x + p.w &&
-        player.y + player.size > p.y && player.y + player.size < p.y + p.h + 10 && player.vy >= 0) {
+    if (player.x + player.size > p.x &&
+        player.x - player.size < p.x + p.w &&
+        player.y + player.size > p.y &&
+        player.y + player.size < p.y + p.h + 12 &&
+        player.vy >= 0) {
       player.y = p.y - player.size;
       player.vy = 0;
       player.onGround = true;
-      if (p.isFinish) nextStage();
+      if (p.finish) {
+        spawnParticles(player.x, player.y, "#d4b06a");
+        if (current < stages.length - 1) {
+          current++;
+          generateLevel(current);
+          player.x = 90;
+          player.y = 380;
+          stageEl.textContent = `Étape ${current + 1} — ${stages[current].name}`;
+          showMessage(stages[current].name);
+        } else {
+          won = true;
+          winScreen.style.display = "flex";
+          showMessage("Gardien du Sacré");
+        }
+      }
     }
   }
 
-  if (player.y > 620) {
+  // Fall
+  if (player.y > 640) {
     lives--;
-    showMsg(lives > 0 ? `Vie perdue (${lives} restantes)` : "Recommence");
+    livesEl.textContent = "Vies : " + lives;
+    spawnParticles(player.x, 500, "#c4543e");
     if (lives <= 0) {
-      currentStage = 0;
+      current = 0;
       lives = 3;
-      generatePlatforms(0);
-      ui.textContent = "Étape 1 — Graine de Vie";
+      livesEl.textContent = "Vies : 3";
+      generateLevel(0);
+      stageEl.textContent = "Étape 1 — Graine de Vie";
+      showMessage("Recommence le Parcours");
+    } else {
+      showMessage("Vie perdue");
     }
-    resetPlayer();
+    player.x = 90;
+    player.y = 380;
+    player.vy = 0;
   }
 
   player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+
+  // Particles
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+  });
+  particles = particles.filter(p => p.life > 0);
+}
+
+function drawSacredGeometry() {
+  ctx.strokeStyle = "rgba(212, 176, 106, 0.12)";
+  ctx.lineWidth = 1;
+  const cx = 500, cy = 180;
+  for (let r = 40; r <= 160; r += 40) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(a) * 50, cy + Math.sin(a) * 50, 50, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 function draw() {
   ctx.fillStyle = "#121018";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // subtle geometry background
-  ctx.strokeStyle = "rgba(212,176,106,0.15)";
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 5; i++) {
-    ctx.beginPath();
-    ctx.arc(200 + i*150, 150, 40 + i*10, 0, Math.PI*2);
-    ctx.stroke();
-  }
+  drawSacredGeometry();
 
+  // Platforms
   platforms.forEach(p => {
     ctx.fillStyle = p.color;
     ctx.fillRect(p.x, p.y, p.w, p.h);
-    if (p.isFinish) {
+    if (p.finish) {
       ctx.strokeStyle = "#d4b06a";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(p.x, p.y, p.w, p.h);
+      ctx.lineWidth = 2;
+      ctx.strokeRect(p.x - 2, p.y - 2, p.w + 4, p.h + 4);
     }
   });
 
-  // player
+  // Particles
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life / 30;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+
+  // Player
   ctx.fillStyle = "#f3ecdf";
   ctx.beginPath();
-  ctx.arc(player.x, player.y, player.size, 0, Math.PI*2);
+  ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = "#d4b06a";
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // lives
-  ctx.fillStyle = "#d4b06a";
-  ctx.font = "16px Georgia";
-  ctx.fillText("Vies : " + lives, 20, 580);
+  // Inner glow
+  ctx.fillStyle = "rgba(212, 176, 106, 0.4)";
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, 6, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function loop() {
@@ -173,7 +283,7 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-generatePlatforms(0);
+generateLevel(0);
 loop();
 </script>
 <div id="shop" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-size:14px;"><a href="https://organized-synergy.myshopify.com" style="color:#d4b06a;text-decoration:none;">Voir les grimoires — organized-synergy.myshopify.com</a></div>
